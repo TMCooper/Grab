@@ -4,7 +4,7 @@
 # requires: gh (github cli)
 #
 
-VERSION="2.4.0"
+VERSION="2.4.1"
 GRAB_REPO="TMCooper/Grab"
 
 # -- colors --
@@ -178,10 +178,10 @@ _list() {
     local output
     if [ -n "$owner" ]; then
         output=$(gh repo list "$owner" --limit 200 --json name,visibility,description \
-            --template '{{range .}}  {{printf "%-32s %-8s %s\n" .name .visibility .description}}{{end}}' 2>/dev/null)
+            --template '{{range .}}  {{printf "%-32s %-8s %s\n" .name .visibility .description}}{{end}}')
     else
         output=$(gh repo list --limit 200 --json name,visibility,description \
-            --template '{{range .}}  {{printf "%-32s %-8s %s\n" .name .visibility .description}}{{end}}' 2>/dev/null)
+            --template '{{range .}}  {{printf "%-32s %-8s %s\n" .name .visibility .description}}{{end}}')
     fi
 
     if [ -z "$output" ]; then
@@ -224,9 +224,9 @@ _search() {
 
     local repos
     if [ -n "$owner" ]; then
-        repos=$(gh repo list "$owner" --limit 200 --json nameWithOwner --jq '.[].nameWithOwner' 2>/dev/null)
+        repos=$(gh repo list "$owner" --limit 200 --json nameWithOwner --jq '.[].nameWithOwner')
     else
-        repos=$(gh repo list --limit 200 --json nameWithOwner --jq '.[].nameWithOwner' 2>/dev/null)
+        repos=$(gh repo list --limit 200 --json nameWithOwner --jq '.[].nameWithOwner')
     fi
     [ -z "$repos" ] && return
 
