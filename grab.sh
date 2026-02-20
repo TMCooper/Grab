@@ -4,19 +4,19 @@
 # requires: gh (github cli)
 #
 
-VERSION="2.2.0"
+VERSION="2.3.0"
 GRAB_REPO="TMCooper/Grab"
 
-# -- colors --
-r='\033[0;31m' g='\033[0;32m' y='\033[1;33m'
-b='\033[0;34m' c='\033[0;36m' w='\033[1m'
-d='\033[2m' n='\033[0m'
+# -- colors (using $'...' so escape chars are real bytes) --
+r=$'\033[0;31m' g=$'\033[0;32m' y=$'\033[1;33m'
+b=$'\033[0;34m' c=$'\033[0;36m' w=$'\033[1m'
+d=$'\033[2m' n=$'\033[0m'
 
-msg()  { echo -e "${b}${1}${n}"; }
-ok()   { echo -e "${g}${1}${n}"; }
-warn() { echo -e "${y}${1}${n}"; }
-err()  { echo -e "${r}${1}${n}" >&2; }
-dim()  { echo -e "${d}${1}${n}"; }
+msg()  { printf '%s%s%s\n' "$b" "$1" "$n"; }
+ok()   { printf '%s%s%s\n' "$g" "$1" "$n"; }
+warn() { printf '%s%s%s\n' "$y" "$1" "$n"; }
+err()  { printf '%s%s%s\n' "$r" "$1" "$n" >&2; }
+dim()  { printf '%s%s%s\n' "$d" "$1" "$n"; }
 
 # -- help --
 usage() {
@@ -36,7 +36,7 @@ usage() {
   ${w}EXAMPLES${n}
     grab anime downloader          matches your repos with both words
     grab -o torvalds linux         search torvalds' repos for 'linux'
-    grab -o JetBrains kotlin       search JetBrains repos
+    grab -o JetBrains              list all JetBrains repos
     grab -l -o microsoft           list microsoft's public repos
 
   ${w}NOTES${n}
@@ -49,8 +49,7 @@ EOF
     exit 0
 }
 
-# -- version comparison --
-# returns 0 if $1 > $2 (newer)
+# -- version comparison: returns 0 if $1 > $2 --
 _version_newer() {
     local v1="${1#v}" v2="${2#v}"
     [ "$v1" = "$v2" ] && return 1
@@ -173,12 +172,24 @@ _list() {
     fi
     echo ""
 
+    local output
     if [ -n "$owner" ]; then
-        gh repo list "$owner" --limit 200 --json name,visibility,description \
-            --template '{{range .}}  {{printf "%-32s %-8s %s\n" .name .visibility .description}}{{end}}'
+        output=$(gh repo list "$owner" --limit 200 --json name,visibility,description \
+            --template '{{range .}}  {{printf "%-32s %-8s %s\n" .name .visibility .description}}{{end}}' 2>/dev/null)
     else
-        gh repo list --limit 200 --json name,visibility,description \
-            --template '{{range .}}  {{printf "%-32s %-8s %s\n" .name .visibility .description}}{{end}}'
+        output=$(gh repo list --limit 200 --json name,visibility,description \
+            --template '{{range .}}  {{printf "%-32s %-8s %s\n" .name .visibility .description}}{{end}}' 2>/dev/null)
+    fi
+
+    if [ -z "$output" ]; then
+        if [ -n "$owner" ]; then
+            err "no repos found for '$owner'."
+            dim "  check the username/org name and try again."
+        else
+            err "no repos found."
+        fi
+    else
+        echo "$output"
     fi
 
     echo ""
@@ -256,14 +267,14 @@ _pick() {
     for repo in "${choices[@]}"; do
         local name="${repo##*/}"
         local owner="${repo%%/*}"
-        printf "  ${w}%2d${n}  %s ${d}(%s)${n}\n" "$i" "$name" "$owner"
+        printf "  %s%2d%s  %s %s(%s)%s\n" "$w" "$i" "$n" "$name" "$d" "$owner" "$n"
         ((i++))
     done
 
     echo ""
     local pick
     while true; do
-        printf "${c}  pick [1-%d, q=quit]: ${n}" "$count"
+        printf "%s  pick [1-%d, q=quit]: %s" "$c" "$count" "$n"
         read -r pick
 
         [[ "$pick" == "q" || "$pick" == "Q" ]] && { dim "  cancelled."; exit 0; }
@@ -338,7 +349,11 @@ if [ ${#KEYWORDS[@]} -eq 0 ] && [ -z "$OWNER" ]; then
 fi
 
 if [ -n "$OWNER" ]; then
-    msg "searching ${OWNER}'s repos for '${KEYWORDS[*]}'..."
+    if [ ${#KEYWORDS[@]} -gt 0 ]; then
+        msg "searching ${OWNER}'s repos for '${KEYWORDS[*]}'..."
+    else
+        msg "listing ${OWNER}'s repos..."
+    fi
 else
     msg "searching '${KEYWORDS[*]}'..."
 fi
@@ -348,7 +363,11 @@ mapfile -t hits < <(_search "$OWNER" "${KEYWORDS[@]}")
 
 case ${#hits[@]} in
     0)
-        err "no repos matched '${KEYWORDS[*]}'."
+        if [ ${#KEYWORDS[@]} -gt 0 ]; then
+            err "no repos matched '${KEYWORDS[*]}'."
+        else
+            err "no repos found."
+        fi
         if [ -n "$OWNER" ]; then
             dim "  try: grab -l -o $OWNER"
         else
