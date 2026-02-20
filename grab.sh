@@ -4,10 +4,10 @@
 # requires: gh (github cli)
 #
 
-VERSION="2.3.0"
+VERSION="2.4.0"
 GRAB_REPO="TMCooper/Grab"
 
-# -- colors (using $'...' so escape chars are real bytes) --
+# -- colors --
 r=$'\033[0;31m' g=$'\033[0;32m' y=$'\033[1;33m'
 b=$'\033[0;34m' c=$'\033[0;36m' w=$'\033[1m'
 d=$'\033[2m' n=$'\033[0m'
@@ -49,7 +49,7 @@ EOF
     exit 0
 }
 
-# -- version comparison: returns 0 if $1 > $2 --
+# -- version comparison --
 _version_newer() {
     local v1="${1#v}" v2="${2#v}"
     [ "$v1" = "$v2" ] && return 1
@@ -64,13 +64,13 @@ _version_newer() {
     return 1
 }
 
-# -- auto update: compare version with remote, update if newer --
+# -- auto update --
 _auto_update() {
     command -v grab &>/dev/null || return
 
     local remote_version
     remote_version=$(gh api "repos/${GRAB_REPO}/contents/grab.sh?ref=main" --jq '.content' 2>/dev/null \
-        | base64 -d 2>/dev/null | grep -m1 '^VERSION=' | cut -d'"' -f2)
+        | base64 -d 2>/dev/null | tr -d '\r' | grep -m1 '^VERSION=' | cut -d'"' -f2)
     [ -z "$remote_version" ] && return
 
     _version_newer "$remote_version" "$VERSION" || return
@@ -79,13 +79,16 @@ _auto_update() {
 
     local tmp
     tmp=$(mktemp)
-    if gh api "repos/${GRAB_REPO}/contents/grab.sh?ref=main" --jq '.content' 2>/dev/null | base64 -d > "$tmp" 2>/dev/null; then
+    # Important: tr -d '\r' to fix potential CRLF issues from Windows pushes
+    if gh api "repos/${GRAB_REPO}/contents/grab.sh?ref=main" --jq '.content' 2>/dev/null \
+        | base64 -d 2>/dev/null | tr -d '\r' > "$tmp" 2>/dev/null; then
         local target
         target=$(command -v grab 2>/dev/null || echo "$HOME/.local/bin/grab")
         cp "$tmp" "$target"
         chmod +x "$target"
         rm -f "$tmp"
-        ok "updated."
+        ok "updated. please restart the command."
+        exit 0
     else
         rm -f "$tmp"
     fi
@@ -213,7 +216,7 @@ _normalize() {
     echo "$1" | tr '[:upper:]' '[:lower:]' | tr -d ' _.-'
 }
 
-# -- search repos (own or from a specific owner) --
+# -- search repos --
 _search() {
     local owner="$1"
     shift
@@ -235,6 +238,7 @@ _search() {
 
     local results=()
     while IFS= read -r repo; do
+        [ -z "$repo" ] && continue
         local name_part="${repo##*/}"
         local norm
         norm=$(_normalize "$name_part")
@@ -301,7 +305,7 @@ _clone_repo() {
 }
 
 # ============================================================
-#  main — argument parsing
+#  main
 # ============================================================
 
 [ $# -eq 0 ] && usage
@@ -317,7 +321,10 @@ while [ $# -gt 0 ]; do
         --install)    _do_install ;;
         -l|--list)    DO_LIST=true; shift ;;
         -o|--owner)
-            [ -z "${2:-}" ] && { err "-o requires an owner name."; exit 1; }
+            if [ -z "${2:-}" ] || [[ "${2:-}" == -* ]]; then
+                err "-o requires an owner name."
+                exit 1
+            fi
             OWNER="$2"
             shift 2
             ;;
@@ -335,7 +342,7 @@ done
 _require_gh
 _require_auth
 
-# check for updates and apply if newer
+# Check for updates (exits if updated)
 _auto_update
 
 # -- list mode --
