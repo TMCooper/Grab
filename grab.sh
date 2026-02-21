@@ -4,7 +4,7 @@
 # requires: gh (github cli)
 #
 
-VERSION="2.6.0"
+VERSION="2.7.1"
 GRAB_REPO="TMCooper/Grab"
 
 # -- colors & themes --
@@ -44,8 +44,10 @@ usage() {
     ${g}grab${n} -o <owner> [keywords...]  ${d}Search & clone from another user/org${n}
     ${g}grab${n} -b [branch] [keywords...] ${d}Search & clone specific branch${n}
     ${g}grab${n} -l, --list                ${d}List all your repos${n}
+    ${g}grab${n} -d, --desc                ${d}Show full descriptions in list${n}
     ${g}grab${n} --install                 ${d}Install grab globally${n}
     ${g}grab${n} -h, --help                ${d}Show this help${n}
+    ${g}grab${n} -v, --version             ${d}Show version${n}
 
   ${w}EXAMPLES${n}
     ${c}grab anime downloader${n}          ${d}Matches 'Anime-Sama-Downloader'${n}
@@ -175,6 +177,7 @@ _do_install() {
 # -- list repos --
 _list() {
     local owner="$1"
+    local full_desc="${FULL_DESC:-false}"
     _require_gh && _require_auth
 
     if [ -n "$owner" ]; then
@@ -184,12 +187,17 @@ _list() {
     fi
 
     local output
-    if [ -n "$owner" ]; then
-        output=$(gh repo list "$owner" --limit 200 --json name,visibility,description \
-            --template '{{range .}}  {{printf "%s%-30s%s %s%-8s%s %s%s%s\n" "\033[1m" .name "\033[0m" "\033[2m" .visibility "\033[0m" "\033[0;34m" .description "\033[0m"}}{{end}}')
+    local template
+    if $full_desc; then
+        template='{{range .}}  {{printf "\033[1m%-32s\033[0m " .name}}{{if eq .visibility "PUBLIC"}}{{printf "\033[0;32m%-8s\033[0m " .visibility}}{{else}}{{printf "\033[0;31m%-8s\033[0m " .visibility}}{{end}}{{printf " \033[0;34m%s\033[0m\n" .description}}{{end}}'
     else
-        output=$(gh repo list --limit 200 --json name,visibility,description \
-            --template '{{range .}}  {{printf "%s%-30s%s %s%-8s%s %s%s%s\n" "\033[1m" .name "\033[0m" "\033[2m" .visibility "\033[0m" "\033[0;34m" .description "\033[0m"}}{{end}}')
+        template='{{range .}}  {{printf "\033[1m%-32s\033[0m " .name}}{{if eq .visibility "PUBLIC"}}{{printf "\033[0;32m%-8s\033[0m " .visibility}}{{else}}{{printf "\033[0;31m%-8s\033[0m " .visibility}}{{end}}{{printf " \033[0;34m%.50s\033[0m\n" .description}}{{end}}'
+    fi
+
+    if [ -n "$owner" ]; then
+        output=$(gh repo list "$owner" --limit 200 --json name,visibility,description --template "$template")
+    else
+        output=$(gh repo list --limit 200 --json name,visibility,description --template "$template")
     fi
 
     if [ -z "$output" ]; then
@@ -321,7 +329,7 @@ _pick_branch() {
     echo ""
     local i=1
     for b_name in "${b_hits[@]}"; do
-        printf "  ${m}%2d${n}  %s\n" "$i" "$b_name"
+        printf "  ${m}%2d${n}  ${c}%s${n}\n" "$i" "$b_name"
         ((i++))
     done
 
@@ -379,6 +387,7 @@ while [ $# -gt 0 ]; do
         -v|--version) echo "grab v${VERSION}"; exit 0 ;;
         --install)    _do_install ;;
         -l|--list)    DO_LIST=true; shift ;;
+        -d|--desc)    FULL_DESC=true; shift ;;
         -o|--owner)
             if [ -z "${2:-}" ] || [[ "${2:-}" == -* ]]; then
                 err "-o requires an owner name."

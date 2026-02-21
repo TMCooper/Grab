@@ -1,66 +1,48 @@
 # Grab
 
-**Grab** is a minimalist, ultra-fast CLI tool designed to search and clone GitHub repositories without ever leaving your terminal or typing a full URL. Built on top of the [GitHub CLI (`gh`)](https://cli.github.com/), it adds fuzzy search and smart disambiguation to make your workflow seamless.
+**Grab** is a minimalist, ultra-fast CLI tool to search and clone GitHub projects without typing URLs. Built on top of [GitHub CLI (`gh`)](https://cli.github.com/), it features fuzzy search, smart picking, and automatic updates.
 
-[![GitHub license](https://img.shields.io/github/license/TMCooper/Grab)](https://github.com/TMCooper/Grab/blob/main/LICENSE)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/TMCooper/Grab)](https://github.com/TMCooper/Grab/releases)
+[![GitHub license](https://img.shields.io/github/license/TMCooper/Grab)](https://github.com/TMCooper/Grab/blob/main/LICENSE)
 
-## Features
-
-- **Fuzzy Matching**: Search by keywords. Case? Separators like `-` and `_`? `Grab` doesn't care. It finds what you mean.
-- **Fast Search**: Instant results across your own repositories.
-- **Owner Support**: Search and clone from any user or organization with the `-o` flag.
-- **Branch Support**: Clone specific branches or pick one interactively with the `-b` flag.
-- **Smart Selection**: If multiple repositories match your query, `Grab` interactive menu lets you pick the right one in one keystroke.
-- **Auto-Update**: Stays up to date automatically. It checks for new versions and updates itself in place.
-- **Unix-Style UI**: Clean, colored, and professional output.
+## Core Features
+- **Smart Fuzzy Search**: Case-insensitive, ignores separators (`-`, `_`, `.`).
+- **User & Org Support**: Clone from your account or any other GitHub user/organization (`-o`).
+- **Branch Support**: Clone specific branches or pick one interactively (`-b`).
+- **Clean View**: Truncated descriptions by default, full view with `-d`.
+- **Modern UI**: Professional terminal output with headers and status colors.
+- **Zero Maintenance**: Auto-updates itself on launch.
 
 ## Installation
-
-Just run this one-liner to install `grab` to your `~/.local/bin`:
-
 ```bash
 curl -sSL https://raw.githubusercontent.com/TMCooper/Grab/main/grab.sh | bash -s -- --install
 ```
+*Restart your terminal or run `source ~/.bashrc` after installing.*
 
-*Don't forget to restart your terminal or run `source ~/.bashrc` (or `~/.zshrc`) after installation.*
+## Quick Start
 
-## Usage
-
-### Clone your own projects
+### Basic Cloning
 ```bash
-grab anime downloader    # Matches 'Anime-Sama-Downloader'
-grab rias bot           # Matches 'Rias-Gremory-Bot'
+grab my project                      # Search & clone your own repo
+grab -o TMCooper Anime Downloader    # Search in another user's repos
+grab -o vercel next                  # Search in an organization's repos
 ```
 
-### Clone from others
+### Branch Management
 ```bash
-grab -o microsoft terminal    # Search 'terminal' in Microsoft's repos
-grab -o torvalds linux        # You know what this does
+grab myrepo -b dev       # Clone 'dev' branch directly
+grab myrepo -b           # Pick a branch from an interactive menu
 ```
 
-### Clone specific branches
+### Exploration & Listing
 ```bash
-grab myrepo -b dev           # Clone branch 'dev' of 'myrepo'
-grab myrepo -b               # List branches of 'myrepo' and pick one
-grab -o owner repo -b branch # Compose owner and branch flags
+grab -l                  # List your repos (clean view)
+grab -l -o microsoft -d  # List Microsoft repos with full descriptions
 ```
 
-### Explore
-```bash
-grab -l                  # List all your repositories
-grab -l -o vercel        # List all public repositories of Vercel
-grab -o JetBrains        # List all JetBrains repos and pick one to clone
-```
-
-## 🛠️ Requirements
-
-- [GitHub CLI (`gh`)](https://cli.github.com/) installed and authenticated (`gh auth login`).
-- `bash`, `curl`, `grep`, `sed`, `tr`.
-
-## Contributing
-
-Feel free to open issues or pull requests if you have suggestions for new features or improvements!
+## Requirements
+- [GitHub CLI (`gh`)](https://cli.github.com/) authenticated (`gh auth login`).
+- Standard tools: `bash`, `curl`, `grep`, `sed`, `tr`.
 
 ---
-Developed by [TMCooper](https://github.com/TMCooper)
+Made by [TMCooper](https://github.com/TMCooper)
