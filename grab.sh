@@ -4,48 +4,58 @@
 # requires: gh (github cli)
 #
 
-VERSION="2.5.0"
+VERSION="2.6.0"
 GRAB_REPO="TMCooper/Grab"
 
-# -- colors --
+# -- colors & themes --
 r=$'\033[0;31m' g=$'\033[0;32m' y=$'\033[1;33m'
 b=$'\033[0;34m' c=$'\033[0;36m' w=$'\033[1m'
-d=$'\033[2m' n=$'\033[0m'
+m=$'\033[0;35m' d=$'\033[2m' n=$'\033[0m'
 
-msg()  { printf '%s%s%s\n' "$b" "$1" "$n"; }
-ok()   { printf '%s%s%s\n' "$g" "$1" "$n"; }
-warn() { printf '%s%s%s\n' "$y" "$1" "$n"; }
-err()  { printf '%s%s%s\n' "$r" "$1" "$n" >&2; }
-dim()  { printf '%s%s%s\n' "$d" "$1" "$n"; }
+# -- icons (unicode safe) --
+ICON_REPO="REPO"
+ICON_OWNER="USER"
+ICON_BRANCH="BRCH"
+ICON_SEARCH="SRCH"
+ICON_SUCCESS="DONE"
+ICON_ERROR="ERR!"
+ICON_WARN="WARN"
+
+# -- helper UI functions --
+msg()   { printf "  ${b}%s${n} %s\n" "$ICON_SEARCH" "$1"; }
+ok()    { printf "  ${g}%s${n} %s\n" "$ICON_SUCCESS" "$1"; }
+warn()  { printf "  ${y}%s${n} %s\n" "$ICON_WARN" "$1"; }
+err()   { printf "  ${r}%s${n} %s\n" "$ICON_ERROR" "$1" >&2; }
+dim()   { printf "  ${d}%s${n}\n" "$1"; }
+header() {
+    echo ""
+    printf "  ${w}${c}%s${n}\n" "$1"
+    printf "  ${d}%s${n}\n" "----------------------------------------------------"
+}
 
 # -- help --
 usage() {
-    cat <<EOF
-
-  ${w}grab${n} v${VERSION} — fast GitHub repo search & clone
+    echo -e "
+  ${w}${c}grab${n} ${d}v${VERSION}${n}
+  ${d}Fast GitHub repository search & cloning tool${n}
 
   ${w}USAGE${n}
-    grab <keywords...>             search & clone your own repo
-    grab -o <owner> [keywords...]  search & clone from another user/org
-    grab -b [branch] [keywords...] search & clone specific branch
-    grab -l, --list                list all your repos
-    grab --install                 install grab globally
-    grab -h, --help                show this help
-    grab -v, --version             show version
+    ${g}grab${n} <keywords...>             ${d}Search & clone your own repo${n}
+    ${g}grab${n} -o <owner> [keywords...]  ${d}Search & clone from another user/org${n}
+    ${g}grab${n} -b [branch] [keywords...] ${d}Search & clone specific branch${n}
+    ${g}grab${n} -l, --list                ${d}List all your repos${n}
+    ${g}grab${n} --install                 ${d}Install grab globally${n}
+    ${g}grab${n} -h, --help                ${d}Show this help${n}
 
   ${w}EXAMPLES${n}
-    grab anime downloader          matches your repos with both words
-    grab -o torvalds linux         search torvalds' repos for 'linux'
-    grab -b dev myrepo            clone branch 'dev' of 'myrepo'
-    grab myrepo -b                 pick a branch interactively for 'myrepo'
+    ${c}grab anime downloader${n}          ${d}Matches 'Anime-Sama-Downloader'${n}
+    ${c}grab -o torvalds linux${n}         ${d}Search 'linux' in Torvalds' repos${n}
+    ${c}grab myrepo -b dev${n}             ${d}Clone branch 'dev' of 'myrepo'${n}
 
   ${w}NOTES${n}
-    - case insensitive, order independent
-    - separators (- _ .) are ignored during matching
-    - without -o, searches ${y}your${n} repos only
-    - auto-updates on launch if a new version is available
-
-EOF
+    ${d}• Separators (- _ .) are ignored during fuzzy search${n}
+    ${d}• Auto-updates on launch if a new version is available${n}
+    "
     exit 0
 }
 
@@ -75,8 +85,9 @@ _auto_update() {
 
     _version_newer "$remote_version" "$VERSION" || return
 
-    msg "updating v${VERSION} -> v${remote_version}..."
-
+    header "SYSTEM UPDATE"
+    msg "A newer version is available (v${VERSION} → v${remote_version})"
+    
     local tmp
     tmp=$(mktemp)
     if gh api "repos/${GRAB_REPO}/contents/grab.sh?ref=main" --jq '.content' 2>/dev/null \
@@ -86,17 +97,19 @@ _auto_update() {
         cp "$tmp" "$target"
         chmod +x "$target"
         rm -f "$tmp"
-        ok "updated."
+        ok "Update successful. Please restart your command."
+        echo ""
         exit 0
     else
         rm -f "$tmp"
+        warn "Auto-update failed. Proceeding with current version..."
     fi
 }
 
 # -- detect package manager & install gh --
 _install_gh() {
     warn "gh (GitHub CLI) is not installed."
-    msg "attempting auto-install..."
+    msg "Attempting auto-install..."
 
     local pm=""
     if   command -v apt    &>/dev/null; then pm="apt"
@@ -108,7 +121,6 @@ _install_gh() {
 
     case "$pm" in
         apt)
-            dim "  -> detected apt (debian/ubuntu)"
             sudo mkdir -p -m 755 /etc/apt/keyrings
             wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
                 | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
@@ -118,19 +130,19 @@ https://cli.github.com/packages stable main" \
                 | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
             sudo apt update -qq && sudo apt install -y -qq gh
             ;;
-        pacman) dim "  -> detected pacman (arch)";  sudo pacman -Sy --noconfirm github-cli ;;
-        dnf)    dim "  -> detected dnf (fedora)";    sudo dnf install -y -q gh ;;
-        zypper) dim "  -> detected zypper (suse)";   sudo zypper install -y gh ;;
-        brew)   dim "  -> detected brew";            brew install gh ;;
+        pacman) sudo pacman -Sy --noconfirm github-cli ;;
+        dnf)    sudo dnf install -y -q gh ;;
+        zypper) sudo zypper install -y gh ;;
+        brew)   brew install gh ;;
         *)
-            err "could not detect a supported package manager."
-            err "install gh manually: https://cli.github.com"
+            err "Could not detect a supported package manager."
+            dim "Install gh manually: https://cli.github.com"
             exit 1
             ;;
     esac
 
     command -v gh &>/dev/null || { err "gh installation failed."; exit 1; }
-    ok "gh installed."
+    ok "gh successfully installed."
 }
 
 # -- install grab globally --
@@ -139,6 +151,7 @@ _do_install() {
     local src
     src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
+    header "INSTALLATION"
     mkdir -p "$dest"
     cp "$src" "$dest/grab"
     chmod +x "$dest/grab"
@@ -151,11 +164,10 @@ _do_install() {
         patched="$patched $(basename "$rc")"
     done
 
+    ok "Binary installed to $dest/grab"
+    [ -n "$patched" ] && dim "Added to PATH via: $patched"
     echo ""
-    ok "installed -> $dest/grab"
-    [ -n "$patched" ] && dim "  PATH added to:$patched"
-    echo ""
-    dim "  open a new shell or run: source ~/.bashrc"
+    msg "Restart your shell or run: ${c}source ~/.bashrc${n}"
     echo ""
     exit 0
 }
@@ -163,59 +175,52 @@ _do_install() {
 # -- list repos --
 _list() {
     local owner="$1"
-
     _require_gh && _require_auth
 
-    echo ""
     if [ -n "$owner" ]; then
-        msg "repos of $owner:"
+        header "REPOSITORIES: $owner"
     else
-        msg "your repos:"
+        header "YOUR REPOSITORIES"
     fi
-    echo ""
 
     local output
     if [ -n "$owner" ]; then
         output=$(gh repo list "$owner" --limit 200 --json name,visibility,description \
-            --template '{{range .}}  {{printf "%-32s %-8s %s\n" .name .visibility .description}}{{end}}')
+            --template '{{range .}}  {{printf "%s%-30s%s %s%-8s%s %s%s%s\n" "\033[1m" .name "\033[0m" "\033[2m" .visibility "\033[0m" "\033[0;34m" .description "\033[0m"}}{{end}}')
     else
         output=$(gh repo list --limit 200 --json name,visibility,description \
-            --template '{{range .}}  {{printf "%-32s %-8s %s\n" .name .visibility .description}}{{end}}')
+            --template '{{range .}}  {{printf "%s%-30s%s %s%-8s%s %s%s%s\n" "\033[1m" .name "\033[0m" "\033[2m" .visibility "\033[0m" "\033[0;34m" .description "\033[0m"}}{{end}}')
     fi
 
     if [ -z "$output" ]; then
         if [ -n "$owner" ]; then
-            err "no repos found for '$owner'."
-            dim "  check the username/org name and try again."
+            err "No public repositories found for '$owner'."
         else
-            err "no repos found."
+            err "No repositories found."
         fi
     else
-        echo "$output"
+        echo -e "$output"
     fi
-
     echo ""
     exit 0
 }
 
-# -- checks --
 _require_gh() {
     command -v gh &>/dev/null || _install_gh
 }
 
 _require_auth() {
     gh auth status &>/dev/null 2>&1 || {
-        err "not authenticated. run: gh auth login"
+        err "Not authenticated with GitHub CLI."
+        dim "Please run: ${c}gh auth login${n}"
         exit 1
     }
 }
 
-# -- normalize a string for fuzzy match --
 _normalize() {
     echo "$1" | tr '[:upper:]' '[:lower:]' | tr -d ' _.-'
 }
 
-# -- search repos --
 _search() {
     local owner="$1"
     shift
@@ -229,7 +234,6 @@ _search() {
     fi
     [ -z "$repos" ] && return
 
-    # no keywords = return all
     if [ ${#terms[@]} -eq 0 ]; then
         echo "$repos"
         return
@@ -258,34 +262,33 @@ _search() {
     printf '%s\n' "${results[@]}" 2>/dev/null | sed '/^$/d'
 }
 
-# -- pick from multiple results --
 _pick() {
     local choices=("$@")
     local count=${#choices[@]}
     local branch="${BRANCH:-}"
     local pick_branch="${PICK_BRANCH:-false}"
 
-    warn "$count repos matched:"
+    header "RESULTS"
+    warn "$count repositories found"
     echo ""
 
     local i=1
     for repo in "${choices[@]}"; do
         local name="${repo##*/}"
         local owner="${repo%%/*}"
-        printf "  %s%2d%s  %s %s(%s)%s\n" "$w" "$i" "$n" "$name" "$d" "$owner" "$n"
+        printf "  ${c}%2d${n}  ${w}%-30s${n} ${d}%s${n}\n" "$i" "$name" "$owner"
         ((i++))
     done
 
     echo ""
     local pick
     while true; do
-        printf "%s  pick [1-%d, q=quit]: %s" "$c" "$count" "$n"
+        printf "  ${w}Pick [1-%d, q=quit] > ${n}" "$count"
         read -r pick
 
-        [[ "$pick" == "q" || "$pick" == "Q" ]] && { dim "  cancelled."; exit 0; }
+        [[ "$pick" == "q" || "$pick" == "Q" ]] && { dim "Operation cancelled."; exit 0; }
 
         if [[ "$pick" =~ ^[0-9]+$ ]] && (( pick >= 1 && pick <= count )); then
-            echo ""
             local selected="${choices[$((pick - 1))]}"
             if [ -n "$branch" ]; then
                 _clone_repo "$selected" "$branch"
@@ -296,19 +299,17 @@ _pick() {
             fi
             return
         fi
-
-        err "  invalid choice."
+        err "Invalid choice."
     done
 }
 
-# -- pick branch interactively --
 _pick_branch() {
     local repo="$1"
     local branches
     branches=$(gh api "repos/$repo/branches" --jq '.[].name' 2>/dev/null)
 
     if [ -z "$branches" ]; then
-        warn "No branches found for $repo. Cloning default branch..."
+        warn "No branch list found. Cloning default branch..."
         _clone_repo "$repo"
         return
     fi
@@ -316,62 +317,54 @@ _pick_branch() {
     mapfile -t b_hits < <(echo "$branches")
     local b_count=${#b_hits[@]}
 
-    if [ "$b_count" -eq 1 ]; then
-        _clone_repo "$repo" "${b_hits[0]}"
-        return
-    fi
-
-    warn "$b_count branches available for $repo:"
+    header "CHOOSE BRANCH: ${repo##*/}"
     echo ""
     local i=1
     for b_name in "${b_hits[@]}"; do
-        printf "  ${w}%2d${n}  %s\n" "$i" "$b_name"
+        printf "  ${m}%2d${n}  %s\n" "$i" "$b_name"
         ((i++))
     done
 
     echo ""
     local b_pick
     while true; do
-        printf "${c}  pick branch [1-%d, q=quit]: ${n}" "$b_count"
+        printf "  ${w}Branch [1-%d, q=quit] > ${n}" "$b_count"
         read -r b_pick
 
-        [[ "$b_pick" == "q" || "$b_pick" == "Q" ]] && { dim "  cancelled."; exit 0; }
+        [[ "$b_pick" == "q" || "$b_pick" == "Q" ]] && { dim "Operation cancelled."; exit 0; }
 
         if [[ "$b_pick" =~ ^[0-9]+$ ]] && (( b_pick >= 1 && b_pick <= b_count )); then
-            echo ""
             _clone_repo "$repo" "${b_hits[$((b_pick - 1))]}"
             return
         fi
-        err "  invalid choice."
+        err "Invalid choice."
     done
 }
 
-# -- clone --
 _clone_repo() {
     local repo="$1"
     local branch="${2:-}"
     local name="${repo##*/}"
     
+    header "CLONING"
     if [ -n "$branch" ]; then
-        msg "cloning $name ($branch)..."
+        msg "Target: ${w}${name}${n} (${m}${branch}${n})"
         echo ""
-        if ! gh repo clone "$repo" -- --branch "$branch" 2>/dev/null; then
-            err "could not clone branch '$branch'. Falling back to interactive choice..."
+        if ! gh repo clone "$repo" -- --branch "$branch" 2>&1; then
+            err "Branch '${branch}' not found. Let's pick one."
             _pick_branch "$repo"
         fi
     else
-        msg "cloning $name..."
+        msg "Target: ${w}${name}${n}"
         echo ""
         gh repo clone "$repo"
     fi
     echo ""
-    ok "done. -> ./$name"
+    ok "Repository successfully cloned to ./${name}"
+    echo ""
 }
 
-# ============================================================
-#  main — argument parsing
-# ============================================================
-
+# -- main --
 [ $# -eq 0 ] && usage
 
 OWNER=""
@@ -403,41 +396,31 @@ while [ $# -gt 0 ]; do
                 shift
             fi
             ;;
-        -*)
-            err "unknown flag: $1"
-            usage
-            ;;
-        *)
-            KEYWORDS+=("$1")
-            shift
-            ;;
+        -*) err "Unknown flag: $1"; usage ;;
+        *)  KEYWORDS+=("$1"); shift ;;
     esac
 done
 
 _require_gh
 _require_auth
-
-# Check for updates (exits if updated)
 _auto_update
 
-# -- list mode --
 if $DO_LIST; then
     _list "$OWNER"
 fi
 
-# -- search mode --
 if [ ${#KEYWORDS[@]} -eq 0 ] && [ -z "$OWNER" ]; then
     usage
 fi
 
 if [ -n "$OWNER" ]; then
     if [ ${#KEYWORDS[@]} -gt 0 ]; then
-        msg "searching ${OWNER}'s repos for '${KEYWORDS[*]}'..."
+        msg "Searching ${y}${OWNER}${n} for '${w}${KEYWORDS[*]}${n}'..."
     else
-        msg "listing ${OWNER}'s repos..."
+        msg "Fetching all repositories for ${y}${OWNER}${n}..."
     fi
 else
-    msg "searching '${KEYWORDS[*]}'..."
+    msg "Searching for '${w}${KEYWORDS[*]}${n}'..."
 fi
 echo ""
 
@@ -445,25 +428,14 @@ mapfile -t hits < <(_search "$OWNER" "${KEYWORDS[@]}")
 
 case ${#hits[@]} in
     0)
-        if [ ${#KEYWORDS[@]} -gt 0 ]; then
-            err "no repos matched '${KEYWORDS[*]}'."
-        else
-            err "no repos found."
-        fi
-        if [ -n "$OWNER" ]; then
-            dim "  try: grab -l -o $OWNER"
-        else
-            dim "  try: grab -l"
-        fi
+        err "No repositories matched your search."
+        [ -n "$OWNER" ] && dim "Try: grab -l -o $OWNER" || dim "Try: grab -l"
         exit 1
         ;;
     1)
-        if [ -n "$BRANCH" ]; then
-            _clone_repo "${hits[0]}" "$BRANCH"
-        elif $PICK_BRANCH; then
-            _pick_branch "${hits[0]}"
-        else
-            _clone_repo "${hits[0]}"
+        if [ -n "$BRANCH" ]; then _clone_repo "${hits[0]}" "$BRANCH"
+        elif $PICK_BRANCH; then _pick_branch "${hits[0]}"
+        else _clone_repo "${hits[0]}"
         fi
         ;;
     *)

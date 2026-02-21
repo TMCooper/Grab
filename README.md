@@ -9,9 +9,9 @@
 
 - **Fuzzy Matching**: Search by keywords. Case? Separators like `-` and `_`? `Grab` doesn't care. It finds what you mean.
 - **Fast Search**: Instant results across your own repositories.
-- **🏢 Owner Support**: Search and clone from any user or organization with the `-o` flag.
-- **🌿 Branch Support**: Clone specific branches or pick one interactively with the `-b` flag.
-- **🔢 Smart Selection**: If multiple repositories match your query, `Grab` interactive menu lets you pick the right one in one keystroke.
+- **Owner Support**: Search and clone from any user or organization with the `-o` flag.
+- **Branch Support**: Clone specific branches or pick one interactively with the `-b` flag.
+- **Smart Selection**: If multiple repositories match your query, `Grab` interactive menu lets you pick the right one in one keystroke.
 - **Auto-Update**: Stays up to date automatically. It checks for new versions and updates itself in place.
 - **Unix-Style UI**: Clean, colored, and professional output.
 
