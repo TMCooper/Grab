@@ -4,7 +4,7 @@
 # requires: gh (github cli)
 #
 
-VERSION="2.7.1"
+VERSION="2.8.0"
 GRAB_REPO="TMCooper/Grab"
 
 # -- colors & themes --
@@ -20,6 +20,9 @@ ICON_SEARCH="SRCH"
 ICON_SUCCESS="DONE"
 ICON_ERROR="ERR!"
 ICON_WARN="WARN"
+
+# -- state --
+NEW_VERSION=""
 
 # -- helper UI functions --
 msg()   { printf "  ${b}%s${n} %s\n" "$ICON_SEARCH" "$1"; }
@@ -45,9 +48,10 @@ usage() {
     ${g}grab${n} -b [branch] [keywords...] ${d}Search & clone specific branch${n}
     ${g}grab${n} -l, --list                ${d}List all your repos${n}
     ${g}grab${n} -d, --desc                ${d}Show full descriptions in list${n}
+    ${g}grab${n} --update                  ${d}Update grab to latest version${n}
     ${g}grab${n} --install                 ${d}Install grab globally${n}
-    ${g}grab${n} -h, --help                ${d}Show this help${n}
     ${g}grab${n} -v, --version             ${d}Show version${n}
+    ${g}grab${n} -h, --help                ${d}Show this help${n}
 
   ${w}EXAMPLES${n}
     ${c}grab anime downloader${n}          ${d}Matches 'Anime-Sama-Downloader'${n}
@@ -56,7 +60,7 @@ usage() {
 
   ${w}NOTES${n}
     ${d}• Separators (- _ .) are ignored during fuzzy search${n}
-    ${d}• Auto-updates on launch if a new version is available${n}
+    ${d}• Shows update notice if a new version is available${n}
     "
     exit 0
 }
@@ -76,8 +80,8 @@ _version_newer() {
     return 1
 }
 
-# -- auto update --
-_auto_update() {
+# -- check for update (sets NEW_VERSION if available) --
+_check_update() {
     command -v grab &>/dev/null || return
 
     local remote_version
@@ -85,10 +89,33 @@ _auto_update() {
         | base64 -d 2>/dev/null | tr -d '\r' | grep -m1 '^VERSION=' | cut -d'"' -f2)
     [ -z "$remote_version" ] && return
 
-    _version_newer "$remote_version" "$VERSION" || return
+    if _version_newer "$remote_version" "$VERSION"; then
+        NEW_VERSION="$remote_version"
+    fi
+}
 
+# -- perform update --
+_do_update() {
+    _require_gh && _require_auth
+    
     header "SYSTEM UPDATE"
-    msg "A newer version is available (v${VERSION} → v${remote_version})"
+    msg "Checking for updates..."
+    
+    local remote_version
+    remote_version=$(gh api "repos/${GRAB_REPO}/contents/grab.sh?ref=main" --jq '.content' 2>/dev/null \
+        | base64 -d 2>/dev/null | tr -d '\r' | grep -m1 '^VERSION=' | cut -d'"' -f2)
+    
+    if [ -z "$remote_version" ]; then
+        err "Could not fetch remote version."
+        exit 1
+    fi
+
+    if ! _version_newer "$remote_version" "$VERSION"; then
+        ok "Grab is already up to date (v${VERSION})."
+        exit 0
+    fi
+
+    msg "Updating v${VERSION} → v${remote_version}..."
     
     local tmp
     tmp=$(mktemp)
@@ -99,12 +126,23 @@ _auto_update() {
         cp "$tmp" "$target"
         chmod +x "$target"
         rm -f "$tmp"
-        ok "Update successful. Please restart your command."
+        ok "Update successful. v${remote_version} is now installed."
         echo ""
         exit 0
     else
         rm -f "$tmp"
-        warn "Auto-update failed. Proceeding with current version..."
+        err "Update failed. Please check your internet connection."
+        exit 1
+    fi
+}
+
+# -- print update notice --
+_print_update_notice() {
+    if [ -n "$NEW_VERSION" ]; then
+        echo ""
+        warn "Update available: v${VERSION} → v${NEW_VERSION}"
+        dim "  Run: grab --update"
+        echo ""
     fi
 }
 
@@ -200,7 +238,7 @@ _list() {
         output=$(gh repo list --limit 200 --json name,visibility,description --template "$template")
     fi
 
-    if [ -z "$output" ]; then
+    if [ -z "$output" ] || [ "$output" == "" ]; then
         if [ -n "$owner" ]; then
             err "No public repositories found for '$owner'."
         else
@@ -209,7 +247,7 @@ _list() {
     else
         echo -e "$output"
     fi
-    echo ""
+    _print_update_notice
     exit 0
 }
 
@@ -294,7 +332,7 @@ _pick() {
         printf "  ${w}Pick [1-%d, q=quit] > ${n}" "$count"
         read -r pick
 
-        [[ "$pick" == "q" || "$pick" == "Q" ]] && { dim "Operation cancelled."; exit 0; }
+        [[ "$pick" == "q" || "$pick" == "Q" ]] && { dim "Operation cancelled."; _print_update_notice; exit 0; }
 
         if [[ "$pick" =~ ^[0-9]+$ ]] && (( pick >= 1 && pick <= count )); then
             local selected="${choices[$((pick - 1))]}"
@@ -339,7 +377,7 @@ _pick_branch() {
         printf "  ${w}Branch [1-%d, q=quit] > ${n}" "$b_count"
         read -r b_pick
 
-        [[ "$b_pick" == "q" || "$b_pick" == "Q" ]] && { dim "Operation cancelled."; exit 0; }
+        [[ "$b_pick" == "q" || "$b_pick" == "Q" ]] && { dim "Operation cancelled."; _print_update_notice; exit 0; }
 
         if [[ "$b_pick" =~ ^[0-9]+$ ]] && (( b_pick >= 1 && b_pick <= b_count )); then
             _clone_repo "$repo" "${b_hits[$((b_pick - 1))]}"
@@ -369,10 +407,13 @@ _clone_repo() {
     fi
     echo ""
     ok "Repository successfully cloned to ./${name}"
-    echo ""
+    _print_update_notice
 }
 
-# -- main --
+# ============================================================
+#  main
+# ============================================================
+
 [ $# -eq 0 ] && usage
 
 OWNER=""
@@ -386,6 +427,7 @@ while [ $# -gt 0 ]; do
         -h|--help)    usage ;;
         -v|--version) echo "grab v${VERSION}"; exit 0 ;;
         --install)    _do_install ;;
+        --update)     _do_update ;;
         -l|--list)    DO_LIST=true; shift ;;
         -d|--desc)    FULL_DESC=true; shift ;;
         -o|--owner)
@@ -412,7 +454,7 @@ done
 
 _require_gh
 _require_auth
-_auto_update
+_check_update
 
 if $DO_LIST; then
     _list "$OWNER"
@@ -439,6 +481,7 @@ case ${#hits[@]} in
     0)
         err "No repositories matched your search."
         [ -n "$OWNER" ] && dim "Try: grab -l -o $OWNER" || dim "Try: grab -l"
+        _print_update_notice
         exit 1
         ;;
     1)

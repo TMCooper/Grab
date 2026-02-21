@@ -11,7 +11,7 @@
 - **Branch Support**: Clone specific branches or pick one interactively (`-b`).
 - **Clean View**: Truncated descriptions by default, full view with `-d`.
 - **Modern UI**: Professional terminal output with headers and status colors.
-- **Zero Maintenance**: Auto-updates itself on launch.
+- **Manual Update**: Notifies you if a new version is available (`--update`).
 
 ## Installation
 ```bash
