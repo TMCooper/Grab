@@ -4,7 +4,7 @@
 # requires: gh (github cli)
 #
 
-VERSION="2.4.1"
+VERSION="2.5.0"
 GRAB_REPO="TMCooper/Grab"
 
 # -- colors --
@@ -27,8 +27,8 @@ usage() {
   ${w}USAGE${n}
     grab <keywords...>             search & clone your own repo
     grab -o <owner> [keywords...]  search & clone from another user/org
+    grab -b [branch] [keywords...] search & clone specific branch
     grab -l, --list                list all your repos
-    grab -l -o <owner>             list repos of another user/org
     grab --install                 install grab globally
     grab -h, --help                show this help
     grab -v, --version             show version
@@ -36,8 +36,8 @@ usage() {
   ${w}EXAMPLES${n}
     grab anime downloader          matches your repos with both words
     grab -o torvalds linux         search torvalds' repos for 'linux'
-    grab -o JetBrains              list all JetBrains repos
-    grab -l -o microsoft           list microsoft's public repos
+    grab -b dev myrepo            clone branch 'dev' of 'myrepo'
+    grab myrepo -b                 pick a branch interactively for 'myrepo'
 
   ${w}NOTES${n}
     - case insensitive, order independent
@@ -79,7 +79,6 @@ _auto_update() {
 
     local tmp
     tmp=$(mktemp)
-    # Important: tr -d '\r' to fix potential CRLF issues from Windows pushes
     if gh api "repos/${GRAB_REPO}/contents/grab.sh?ref=main" --jq '.content' 2>/dev/null \
         | base64 -d 2>/dev/null | tr -d '\r' > "$tmp" 2>/dev/null; then
         local target
@@ -87,7 +86,7 @@ _auto_update() {
         cp "$tmp" "$target"
         chmod +x "$target"
         rm -f "$tmp"
-        ok "updated. please restart the command."
+        ok "updated."
         exit 0
     else
         rm -f "$tmp"
@@ -263,6 +262,8 @@ _search() {
 _pick() {
     local choices=("$@")
     local count=${#choices[@]}
+    local branch="${BRANCH:-}"
+    local pick_branch="${PICK_BRANCH:-false}"
 
     warn "$count repos matched:"
     echo ""
@@ -285,7 +286,14 @@ _pick() {
 
         if [[ "$pick" =~ ^[0-9]+$ ]] && (( pick >= 1 && pick <= count )); then
             echo ""
-            _clone_repo "${choices[$((pick - 1))]}"
+            local selected="${choices[$((pick - 1))]}"
+            if [ -n "$branch" ]; then
+                _clone_repo "$selected" "$branch"
+            elif $pick_branch; then
+                _pick_branch "$selected"
+            else
+                _clone_repo "$selected"
+            fi
             return
         fi
 
@@ -293,24 +301,82 @@ _pick() {
     done
 }
 
+# -- pick branch interactively --
+_pick_branch() {
+    local repo="$1"
+    local branches
+    branches=$(gh api "repos/$repo/branches" --jq '.[].name' 2>/dev/null)
+
+    if [ -z "$branches" ]; then
+        warn "No branches found for $repo. Cloning default branch..."
+        _clone_repo "$repo"
+        return
+    fi
+
+    mapfile -t b_hits < <(echo "$branches")
+    local b_count=${#b_hits[@]}
+
+    if [ "$b_count" -eq 1 ]; then
+        _clone_repo "$repo" "${b_hits[0]}"
+        return
+    fi
+
+    warn "$b_count branches available for $repo:"
+    echo ""
+    local i=1
+    for b_name in "${b_hits[@]}"; do
+        printf "  ${w}%2d${n}  %s\n" "$i" "$b_name"
+        ((i++))
+    done
+
+    echo ""
+    local b_pick
+    while true; do
+        printf "${c}  pick branch [1-%d, q=quit]: ${n}" "$b_count"
+        read -r b_pick
+
+        [[ "$b_pick" == "q" || "$b_pick" == "Q" ]] && { dim "  cancelled."; exit 0; }
+
+        if [[ "$b_pick" =~ ^[0-9]+$ ]] && (( b_pick >= 1 && b_pick <= b_count )); then
+            echo ""
+            _clone_repo "$repo" "${b_hits[$((b_pick - 1))]}"
+            return
+        fi
+        err "  invalid choice."
+    done
+}
+
 # -- clone --
 _clone_repo() {
     local repo="$1"
+    local branch="${2:-}"
     local name="${repo##*/}"
-    msg "cloning $name..."
-    echo ""
-    gh repo clone "$repo"
+    
+    if [ -n "$branch" ]; then
+        msg "cloning $name ($branch)..."
+        echo ""
+        if ! gh repo clone "$repo" -- --branch "$branch" 2>/dev/null; then
+            err "could not clone branch '$branch'. Falling back to interactive choice..."
+            _pick_branch "$repo"
+        fi
+    else
+        msg "cloning $name..."
+        echo ""
+        gh repo clone "$repo"
+    fi
     echo ""
     ok "done. -> ./$name"
 }
 
 # ============================================================
-#  main
+#  main — argument parsing
 # ============================================================
 
 [ $# -eq 0 ] && usage
 
 OWNER=""
+BRANCH=""
+PICK_BRANCH=false
 DO_LIST=false
 KEYWORDS=()
 
@@ -327,6 +393,15 @@ while [ $# -gt 0 ]; do
             fi
             OWNER="$2"
             shift 2
+            ;;
+        -b|--branch)
+            if [ -n "${2:-}" ] && [[ "${2:-}" != -* ]]; then
+                BRANCH="$2"
+                shift 2
+            else
+                PICK_BRANCH=true
+                shift
+            fi
             ;;
         -*)
             err "unknown flag: $1"
@@ -383,7 +458,13 @@ case ${#hits[@]} in
         exit 1
         ;;
     1)
-        _clone_repo "${hits[0]}"
+        if [ -n "$BRANCH" ]; then
+            _clone_repo "${hits[0]}" "$BRANCH"
+        elif $PICK_BRANCH; then
+            _pick_branch "${hits[0]}"
+        else
+            _clone_repo "${hits[0]}"
+        fi
         ;;
     *)
         _pick "${hits[@]}"

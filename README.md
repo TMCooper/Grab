@@ -9,8 +9,9 @@
 
 - **Fuzzy Matching**: Search by keywords. Case? Separators like `-` and `_`? `Grab` doesn't care. It finds what you mean.
 - **Fast Search**: Instant results across your own repositories.
-- **Owner Support**: Search and clone from any user or organization with the `-o` flag.
-- **Smart Selection**: If multiple repositories match your query, `Grab` interactive menu lets you pick the right one in one keystroke.
+- **🏢 Owner Support**: Search and clone from any user or organization with the `-o` flag.
+- **🌿 Branch Support**: Clone specific branches or pick one interactively with the `-b` flag.
+- **🔢 Smart Selection**: If multiple repositories match your query, `Grab` interactive menu lets you pick the right one in one keystroke.
 - **Auto-Update**: Stays up to date automatically. It checks for new versions and updates itself in place.
 - **Unix-Style UI**: Clean, colored, and professional output.
 
@@ -36,6 +37,13 @@ grab rias bot           # Matches 'Rias-Gremory-Bot'
 ```bash
 grab -o microsoft terminal    # Search 'terminal' in Microsoft's repos
 grab -o torvalds linux        # You know what this does
+```
+
+### Clone specific branches
+```bash
+grab myrepo -b dev           # Clone branch 'dev' of 'myrepo'
+grab myrepo -b               # List branches of 'myrepo' and pick one
+grab -o owner repo -b branch # Compose owner and branch flags
 ```
 
 ### Explore
