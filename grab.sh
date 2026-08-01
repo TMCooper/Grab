@@ -36,6 +36,17 @@ header() {
     printf "  ${d}%s${n}\n" "----------------------------------------------------"
 }
 
+# -- privilege helper (handles root vs non-root on Raspberry Pi & Linux) --
+_sudo() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    elif command -v sudo &>/dev/null; then
+        sudo "$@"
+    else
+        "$@"
+    fi
+}
+
 # -- help --
 usage() {
     echo -e "
@@ -96,7 +107,7 @@ _check_update() {
 
 # -- perform update --
 _do_update() {
-    _require_gh && _require_auth
+    _require_git && _require_gh && _require_auth
     
     header "SYSTEM UPDATE"
     msg "Checking for updates..."
@@ -146,33 +157,76 @@ _print_update_notice() {
     fi
 }
 
+# -- ensure git is installed --
+_require_git() {
+    if ! command -v git &>/dev/null; then
+        warn "git is not installed."
+        msg "Attempting auto-install of git..."
+        if command -v apt-get &>/dev/null; then
+            _sudo apt-get update -qq && _sudo apt-get install -y -qq git
+        elif command -v apt &>/dev/null; then
+            _sudo apt update -qq && _sudo apt install -y -qq git
+        elif command -v pacman &>/dev/null; then
+            _sudo pacman -Sy --noconfirm git
+        elif command -v dnf &>/dev/null; then
+            _sudo dnf install -y -q git
+        elif command -v zypper &>/dev/null; then
+            _sudo zypper install -y git
+        elif command -v brew &>/dev/null; then
+            brew install git
+        else
+            err "Could not auto-install git. Please install git manually."
+            exit 1
+        fi
+        command -v git &>/dev/null || { err "git installation failed."; exit 1; }
+        ok "git successfully installed."
+    fi
+}
+
 # -- detect package manager & install gh --
 _install_gh() {
     warn "gh (GitHub CLI) is not installed."
     msg "Attempting auto-install..."
 
     local pm=""
-    if   command -v apt    &>/dev/null; then pm="apt"
-    elif command -v pacman &>/dev/null; then pm="pacman"
-    elif command -v dnf    &>/dev/null; then pm="dnf"
-    elif command -v zypper &>/dev/null; then pm="zypper"
-    elif command -v brew   &>/dev/null; then pm="brew"
+    if   command -v apt-get &>/dev/null || command -v apt &>/dev/null; then pm="apt"
+    elif command -v pacman  &>/dev/null; then pm="pacman"
+    elif command -v dnf     &>/dev/null; then pm="dnf"
+    elif command -v zypper  &>/dev/null; then pm="zypper"
+    elif command -v brew    &>/dev/null; then pm="brew"
     fi
 
     case "$pm" in
         apt)
-            sudo mkdir -p -m 755 /etc/apt/keyrings
-            wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-                | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
-            sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] \
-https://cli.github.com/packages stable main" \
-                | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
-            sudo apt update -qq && sudo apt install -y -qq gh
+            _sudo apt-get update -qq
+            if _sudo apt-get install -y -qq gh 2>/dev/null; then
+                ok "gh installed via apt package manager."
+            else
+                # Fallback to official GitHub CLI repository (supports arm64, armhf, etc.)
+                if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
+                    _sudo apt-get install -y -qq curl ca-certificates
+                fi
+
+                _sudo mkdir -p -m 755 /etc/apt/keyrings
+                if command -v curl &>/dev/null; then
+                    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+                        | _sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+                else
+                    wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+                        | _sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+                fi
+
+                _sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+                local arch
+                arch=$(dpkg --print-architecture 2>/dev/null || echo "arm64")
+                echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+                    | _sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+                _sudo apt-get update -qq && _sudo apt-get install -y -qq gh
+            fi
             ;;
-        pacman) sudo pacman -Sy --noconfirm github-cli ;;
-        dnf)    sudo dnf install -y -q gh ;;
-        zypper) sudo zypper install -y gh ;;
+        pacman) _sudo pacman -Sy --noconfirm github-cli ;;
+        dnf)    _sudo dnf install -y -q gh ;;
+        zypper) _sudo zypper install -y gh ;;
         brew)   brew install gh ;;
         *)
             err "Could not detect a supported package manager."
@@ -197,7 +251,7 @@ _do_install() {
     chmod +x "$dest/grab"
 
     local patched=""
-    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
         [ -f "$rc" ] || continue
         grep -qF '.local/bin' "$rc" && continue
         printf '\n# grab - fast repo search & clone\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$rc"
@@ -207,7 +261,7 @@ _do_install() {
     ok "Binary installed to $dest/grab"
     [ -n "$patched" ] && dim "Added to PATH via: $patched"
     echo ""
-    msg "Restart your shell or run: ${c}source ~/.bashrc${n}"
+    msg "Restart your shell or run: ${c}source ~/.bashrc${n} (or ${c}source ~/.profile${n})"
     echo ""
     exit 0
 }
@@ -452,6 +506,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+_require_git
 _require_gh
 _require_auth
 _check_update
